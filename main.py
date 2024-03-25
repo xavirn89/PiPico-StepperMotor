@@ -1,6 +1,6 @@
 import machine
 import utime
-from lib.steppermotor import StepperMotor
+from src.steppermotor import StepperMotor
 
 # Define constants
 STEPS_PER_REV = 200
