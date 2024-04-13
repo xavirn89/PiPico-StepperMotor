@@ -1,66 +1,73 @@
-from machine import Pin
+from machine import Pin, ADC
 import utime
 
-# Pin configuration
+# Configuration constants
 DIRECTION_BUTTON_PIN = 14
 ON_OFF_BUTTON_PIN = 15
 DIR_PIN = 16
 STEP_PIN = 17
-
-# Motor configuration
-SPEED_MICROSECONDS = 1000
+POTENTIOMETER_PIN = 26
 STEPS_PER_REVOLUTION = 200
 
-# Initialize pins
+# Initialize hardware interfaces
 direction_button = Pin(DIRECTION_BUTTON_PIN, Pin.IN, Pin.PULL_DOWN)
 onoff_button = Pin(ON_OFF_BUTTON_PIN, Pin.IN, Pin.PULL_DOWN)
 dirPin = Pin(DIR_PIN, Pin.OUT)
 stepPin = Pin(STEP_PIN, Pin.OUT)
+potentiometer = ADC(POTENTIOMETER_PIN)
 
-# Initialize last known direction, None means no previous direction yet
+# Global variables
 last_direction = None
+speed = 0
+
+def map_val(value, in_min, in_max, out_min, out_max):
+    """Map a value from one range to another."""
+    return (value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
 def initialize_pins():
-    """Set the motor control pins to a known low state."""
+    """Set motor control pins to a default low state at startup."""
     dirPin.low()
     stepPin.low()
 
-def check_direction():
-    """Set the motor direction based on the state of the direction button and check for changes."""
+def check_direction_change():
+    """Check and update motor direction with change detection."""
     global last_direction
     current_direction = direction_button.value()
     
-    if current_direction == 1:
-        dirPin.high()
-        print("Direction button in CW")
-    else:
-        dirPin.low()
-        print("Direction button in CCW")
-
-    # If the direction has changed, reset the step count
-    if last_direction != current_direction:
-        utime.sleep(0.2)
-
-    # Update the last direction to the current
+    # Check if direction has changed
+    if last_direction is not None and last_direction != current_direction:
+        print("Direction change detected, pausing...")
+        utime.sleep(0.2)  # Pause for direction change handling
+    
+    # Update motor direction state
+    dirPin.value(current_direction)
+    print("Motor direction set to:", "CW" if current_direction else "CCW")
     last_direction = current_direction
 
 def move_motor():
-    """Rotate the motor one full revolution, depending on the direction."""
+    """Rotate the motor based on the current speed setting."""
     for _ in range(STEPS_PER_REVOLUTION):
         stepPin.high()
-        utime.sleep_us(SPEED_MICROSECONDS)
+        utime.sleep_us(int(speed))
         stepPin.low()
-        utime.sleep_us(SPEED_MICROSECONDS)
+        utime.sleep_us(int(speed))
+
+def update_motor_speed():
+    """Read potentiometer value and update motor speed accordingly."""
+    global speed
+    potentiometer_reading = potentiometer.read_u16()
+    speed = map_val(potentiometer_reading, 0, 65535, 4000, 750)
+    print("Custom speed set to:", speed)
 
 def main():
-    """Main program loop."""
-    utime.sleep(1)  # Allow system to stabilize after power-up
+    """Main program execution loop."""
+    utime.sleep(1)
     initialize_pins()
-    utime.sleep(1)  # Short delay after initializing pins
 
     while True:
-        if onoff_button.value() == 1:  # Only act if the on-off button is pressed
-            check_direction()
+        if onoff_button.value():
+            update_motor_speed()
+            check_direction_change()
             move_motor()
 
 if __name__ == '__main__':
